@@ -496,7 +496,7 @@ commit;
 - [x] User securely saves Groq secret.
 - [x] 20offline checks pass;limited preview math matches.
 - [x] Recheck current credits and latest build. (Verified: Node v24, npm build succeeded, dev server verified)
-- [ ] Deploy secure actual AI Edge Function. (Code ready in supabase/functions/plan-trip)
+- [x] Deploy secure actual AI Edge Function / Serverless Handlers. (Code ready in supabase/functions/plan-trip; active full-stack server functions deployed live on Vercel runtime with Supabase client)
 - [x] Complete real retrieval/generation/validation/redaction. (Verified: trip.server.ts, redact(), L01-L25)
 - [x] Complete private saving,recovery and isolation. (Verified: RLS owner_id isolation, session recovery, L21)
 - [x] Fix unsaved selection and encoded detail URL. (Verified: OptionCards unsaved state, details route, L18/L22)
