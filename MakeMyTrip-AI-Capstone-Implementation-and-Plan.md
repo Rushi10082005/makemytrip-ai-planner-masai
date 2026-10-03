@@ -556,7 +556,9 @@ commit;
   - **Usability Rating**: 5 / 5.
 
 ### 16.7 Academic Integrity & Acknowledgement
-- **Declaration**: This capstone prototype was engineered by **Rushikesh Ingale** as part of the curriculum requirements.
+- **Student / Developer**: **Rushikesh Ingale**
+- **Institute**: **Masai School (Masai)**
+- **Declaration**: This capstone prototype was engineered by **Rushikesh Ingale** as part of the curriculum requirements at **Masai School**.
 - **Third-Party Attribution**: Built using open-source libraries (React, TanStack Router/Start, Tailwind CSS, Lucide Icons, Vite) and free-tier infrastructure (Vercel, Supabase PostgreSQL, Groq Cloud).
 - **Synthetic Data Notice**: All flight numbers, room rates, and hotel listings are fictional synthetic demonstration fixtures for Nov 2026 – Mar 2027 and do not represent live commercial inventory.
 

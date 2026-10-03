@@ -6,7 +6,7 @@
 
 > **Live Production URL**: [https://makemytrip-ai-planner-masai.vercel.app](https://makemytrip-ai-planner-masai.vercel.app)  
 > **Author**: **Rushikesh Ingale** ([GitHub @Rushi10082005](https://github.com/Rushi10082005) · `rushi.i100805@gmail.com`)  
-> **Program**: Masai Capstone Project  
+> **Institute**: **Masai School (Masai)** · AI Capstone Project  
 > **Full Documentation**: [MakeMyTrip-AI-Capstone-Implementation-and-Plan.md](./MakeMyTrip-AI-Capstone-Implementation-and-Plan.md)  
 > **Test Evidence Ledger**: [output/live-test-status-verified.csv](./output/live-test-status-verified.csv)
 
@@ -194,6 +194,7 @@ Lovable code/
 - **Developer**: **Rushikesh Ingale**
 - **GitHub**: [@Rushi10082005](https://github.com/Rushi10082005)
 - **Email**: `rushi.i100805@gmail.com`
-- **Institution / Program**: Masai Capstone Project
+- **Institute**: **Masai School (Masai)**
+- **Curriculum**: AI Engineering & Full-Stack Capstone Project
 - **Live Application**: [https://makemytrip-ai-planner-masai.vercel.app](https://makemytrip-ai-planner-masai.vercel.app)
 - **Detailed Project Plan & Technical Report**: [`MakeMyTrip-AI-Capstone-Implementation-and-Plan.md`](./MakeMyTrip-AI-Capstone-Implementation-and-Plan.md)
