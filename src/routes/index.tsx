@@ -246,7 +246,8 @@ function Index() {
           },
         ]);
       }
-    } catch {
+    } catch (err) {
+      console.error("Chat sendMessage error:", err);
       setChat((c) => [
         ...c,
         {
