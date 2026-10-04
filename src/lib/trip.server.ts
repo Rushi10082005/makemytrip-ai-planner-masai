@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getCatalog, type Catalog } from "./catalog";
 
-export const MODEL_ID = process.env["GROQ_MODEL"] || "llama-3.3-70b-versatile";
+export const MODEL_ID = process.env["GROQ_MODEL"] || "openai/gpt-oss-120b";
 
 let cachedCatalog: { at: number; cat: Catalog } | null = null;
 
@@ -66,26 +66,43 @@ export function release() {
 export async function callGroq(key: string, messages: { role: string; content: string }[]) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 20000);
+  const candidateModels = Array.from(
+    new Set([
+      MODEL_ID,
+      "openai/gpt-oss-120b",
+      "openai/gpt-oss-20b",
+      "llama-3.3-70b-versatile",
+      "qwen/qwen3.8-27b",
+    ]),
+  );
+
   try {
-    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      signal: ctrl.signal,
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: MODEL_ID,
-        temperature: 0.2,
-        response_format: { type: "json_object" },
-        messages,
-      }),
-    });
-    if (res.status === 429) return { error: "quota" as const };
-    if (res.status === 401 || res.status === 403) return { error: "auth" as const };
-    if (!res.ok) {
-      console.error("groq status", res.status);
-      return { error: "upstream" as const };
+    for (const model of candidateModels) {
+      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        signal: ctrl.signal,
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model,
+          temperature: 0.2,
+          response_format: { type: "json_object" },
+          messages,
+        }),
+      });
+      if (res.status === 429) return { error: "quota" as const };
+      if (res.status === 401 || res.status === 403) return { error: "auth" as const };
+      if (res.status === 404) {
+        // Try next available model in candidates
+        continue;
+      }
+      if (!res.ok) {
+        console.error("groq status", res.status);
+        return { error: "upstream" as const };
+      }
+      const j = await res.json();
+      return { content: String(j?.choices?.[0]?.message?.content ?? "") };
     }
-    const j = await res.json();
-    return { content: String(j?.choices?.[0]?.message?.content ?? "") };
+    return { error: "upstream" as const };
   } catch {
     return { error: "timeout" as const };
   } finally {
