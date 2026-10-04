@@ -329,44 +329,38 @@ export function generateDeterministicFallback(
 
   // Rule-based heuristic field extraction from user message
   const patch: Record<string, unknown> = {};
+  const currentTrip = envelope["current_trip_state"] as Record<string, unknown> | undefined;
 
-  // Check origins
+  // Check origins (25 catalog origins)
   const KNOWN_ORIGINS = [
     "Mumbai",
     "Delhi",
     "Bengaluru",
     "Kolkata",
     "Hyderabad",
-    "Chennai",
-    "Ahmedabad",
-    "Pune",
-    "Jaipur",
-    "Lucknow",
-    "Kochi",
     "Goa",
+    "Jaipur",
+    "Udaipur",
+    "Kochi",
+    "Mysuru",
     "Varanasi",
-    "Srinagar",
     "Amritsar",
-    "Chandigarh",
-    "Bhopal",
-    "Indore",
-    "Patna",
-    "Guwahati",
-    "Bhubaneswar",
-    "Visakhapatnam",
-    "Surat",
-    "Vadodara",
-    "Coimbatore",
+    "Rishikesh",
+    "Shimla",
+    "Manali",
+    "Darjeeling",
+    "Gangtok",
+    "Srinagar",
+    "Leh",
+    "Agra",
+    "Pondicherry",
+    "Ooty",
+    "Madurai",
+    "Puri",
+    "Khajuraho",
   ];
-  for (const city of KNOWN_ORIGINS) {
-    const rx = new RegExp(`\\bfrom\\s+${city}\\b|\\b${city}\\s+to\\b`, "i");
-    if (rx.test(rawText)) {
-      patch["origin"] = city;
-      break;
-    }
-  }
 
-  // Check destinations
+  // Check destinations (20 catalog destinations)
   const KNOWN_DESTS = [
     "Goa",
     "Jaipur",
@@ -389,13 +383,63 @@ export function generateDeterministicFallback(
     "Jodhpur",
     "Khajuraho",
   ];
+
+  // 1. Explicit directional matches
+  for (const city of KNOWN_ORIGINS) {
+    const rx = new RegExp(`\\bfrom\\s+${city}\\b|\\b${city}\\s+to\\b`, "i");
+    if (rx.test(rawText)) {
+      patch["origin"] = city;
+      break;
+    }
+  }
+
   for (const city of KNOWN_DESTS) {
-    const rx = new RegExp(`\\bto\\s+${city}\\b|\\b${city}\\b`, "i");
+    const rx = new RegExp(`\\bto\\s+${city}\\b`, "i");
     if (rx.test(rawText) && patch["origin"] !== city) {
       patch["destination"] = city;
       break;
     }
   }
+
+  // 2. Common Indian city aliases
+  if (!patch["origin"]) {
+    if (/\bnew\s+delhi\b/i.test(rawText)) patch["origin"] = "Delhi";
+    else if (/\bbombay\b/i.test(rawText)) patch["origin"] = "Mumbai";
+    else if (/\bbangalore\b/i.test(rawText)) patch["origin"] = "Bengaluru";
+    else if (/\bcalcutta\b/i.test(rawText)) patch["origin"] = "Kolkata";
+    else if (/\bcochin\b/i.test(rawText)) patch["origin"] = "Kochi";
+    else if (/\bmysore\b/i.test(rawText)) patch["origin"] = "Mysuru";
+  }
+
+  // 3. Fallback destination matching (if destination not set yet and word appears in text)
+  if (!patch["destination"]) {
+    for (const city of KNOWN_DESTS) {
+      const rx = new RegExp(`\\b${city}\\b`, "i");
+      if (rx.test(rawText) && patch["origin"] !== city && currentTrip?.["origin"] !== city) {
+        patch["destination"] = city;
+        break;
+      }
+    }
+  }
+
+  // 4. Fallback origin matching (if origin not set yet and word appears in text)
+  if (!patch["origin"]) {
+    for (const city of KNOWN_ORIGINS) {
+      const rx = new RegExp(`\\b${city}\\b`, "i");
+      if (rx.test(rawText) && patch["destination"] !== city && currentTrip?.["destination"] !== city) {
+        patch["origin"] = city;
+        break;
+      }
+    }
+  }
+
+  const monthMap: Record<string, string> = {
+    nov: "2026-11",
+    dec: "2026-12",
+    jan: "2027-01",
+    feb: "2027-02",
+    mar: "2027-03",
+  };
 
   // Dates: look for ISO dates (YYYY-MM-DD)
   const isoDates = rawText.match(/\b(202\d-\d{2}-\d{2})\b/g);
@@ -408,19 +452,34 @@ export function generateDeterministicFallback(
       /\b(\d{1,2})\s*(?:to|-|–)\s*(\d{1,2})\s*(nov|dec|jan|feb|mar)[a-z]*/i,
     );
     if (dmMatch && dmMatch[1] && dmMatch[2] && dmMatch[3]) {
-      const monthMap: Record<string, string> = {
-        nov: "2026-11",
-        dec: "2026-12",
-        jan: "2027-01",
-        feb: "2027-02",
-        mar: "2027-03",
-      };
       const mPrefix = monthMap[dmMatch[3].slice(0, 3).toLowerCase()];
       if (mPrefix) {
         const d1 = String(dmMatch[1]).padStart(2, "0");
         const d2 = String(dmMatch[2]).padStart(2, "0");
         patch["start_date"] = `${mPrefix}-${d1}`;
         patch["end_date"] = `${mPrefix}-${d2}`;
+      }
+    } else {
+      // Look for individual date mentions, e.g. "4 nov 2026 and return on 10 nov 2026"
+      const dateMatches = Array.from(
+        rawText.matchAll(/\b(\d{1,2})(?:st|nd|rd|th)?\s+(nov|dec|jan|feb|mar)[a-z]*(?:\s+(202[67]))?\b/gi),
+      );
+      const mFirst = dateMatches[0];
+      const mSecond = dateMatches[1];
+      if (mFirst && mSecond && mFirst[1] && mFirst[2] && mSecond[1] && mSecond[2]) {
+        const d1 = String(mFirst[1]).padStart(2, "0");
+        const m1 = mFirst[2].slice(0, 3).toLowerCase();
+        const y1 = mFirst[3] || (m1 === "nov" || m1 === "dec" ? "2026" : "2027");
+
+        const d2 = String(mSecond[1]).padStart(2, "0");
+        const m2 = mSecond[2].slice(0, 3).toLowerCase();
+        const y2 = mSecond[3] || (m2 === "nov" || m2 === "dec" ? "2026" : "2027");
+
+        const mNum1 = m1 === "nov" ? "11" : m1 === "dec" ? "12" : m1 === "jan" ? "01" : m1 === "feb" ? "02" : "03";
+        const mNum2 = m2 === "nov" ? "11" : m2 === "dec" ? "12" : m2 === "jan" ? "01" : m2 === "feb" ? "02" : "03";
+
+        patch["start_date"] = `${y1}-${mNum1}-${d1}`;
+        patch["end_date"] = `${y2}-${mNum2}-${d2}`;
       }
     }
   }
@@ -479,14 +538,19 @@ export function generateDeterministicFallback(
 
   // Build question for missing key fields
   let q: string | null = null;
-  const currentTrip = envelope["current_trip_state"] as Record<string, unknown> | undefined;
   if (!patch["origin"] && !currentTrip?.["origin"]) {
     q = "Which departure city will you be travelling from?";
   } else if (!patch["destination"] && !currentTrip?.["destination"]) {
     q = "Which destination in India would you like to visit?";
   } else if (!patch["start_date"] && !currentTrip?.["start_date"]) {
     q = "What are your travel dates? (Between Nov 2026 and Mar 2027, 2–4 nights)";
-  } else if (!patch["budget_basis"] && patch["budget_inr"] && !currentTrip?.["budget_basis"]) {
+  } else if (!patch["budget_inr"] && !currentTrip?.["budget_inr"]) {
+    q = "What is your approximate trip budget in INR (e.g. ₹25,000)?";
+  } else if (
+    !patch["budget_basis"] &&
+    (patch["budget_inr"] || currentTrip?.["budget_inr"]) &&
+    !currentTrip?.["budget_basis"]
+  ) {
     q = "Is this budget the group total or per person?";
   } else if (!patch["diet"] && !currentTrip?.["diet"]) {
     q = "Do you have any dietary preference: vegetarian, vegan, Jain, or none?";

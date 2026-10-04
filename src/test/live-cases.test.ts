@@ -326,4 +326,42 @@ describe("25 Live Evaluation Test Cases (L01 - L25)", () => {
     expect(clean).not.toContain("4111222233334444");
     expect(clean).not.toContain("gsk_1234567890abcdef");
   });
+
+  it("extracts single-word origin reply when destination is already known", () => {
+    const fallback = generateDeterministicFallback(
+      {
+        latest_user_message: "delhi",
+        current_trip_state: { destination: "Goa" },
+      },
+      "extract",
+      new Map(),
+    );
+    expect(fallback.input_patch["origin"]).toBe("Delhi");
+  });
+
+  it("extracts natural date expressions like 'yes 4 nov 2026 and return on 10 nov 2026'", () => {
+    const fallback = generateDeterministicFallback(
+      {
+        latest_user_message: "yes 4 nov 2026 and return on 10 nov 2026",
+        current_trip_state: { origin: "Mumbai", destination: "Goa" },
+      },
+      "extract",
+      new Map(),
+    );
+    expect(fallback.input_patch["start_date"]).toBe("2026-11-04");
+    expect(fallback.input_patch["end_date"]).toBe("2026-11-10");
+  });
+
+  it("resolves city aliases like 'New Delhi' to 'Delhi'", () => {
+    const fallback = generateDeterministicFallback(
+      {
+        latest_user_message: "New Delhi",
+        current_trip_state: { destination: "Goa" },
+      },
+      "extract",
+      new Map(),
+    );
+    expect(fallback.input_patch["origin"]).toBe("Delhi");
+  });
 });
+

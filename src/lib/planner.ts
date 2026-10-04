@@ -68,7 +68,14 @@ export function nightsBetween(a: string, b: string): number | null {
 const norm = (s: string) => s.trim().toLowerCase();
 
 export function resolveOrigin(city: string, cat: Catalog = getCatalog()) {
-  return cat.origins.find((o) => norm(o.city) === norm(city)) ?? null;
+  const n = norm(city);
+  if (n === "new delhi") return cat.origins.find((o) => norm(o.city) === "delhi") ?? null;
+  if (n === "bombay") return cat.origins.find((o) => norm(o.city) === "mumbai") ?? null;
+  if (n === "bangalore") return cat.origins.find((o) => norm(o.city) === "bengaluru") ?? null;
+  if (n === "calcutta") return cat.origins.find((o) => norm(o.city) === "kolkata") ?? null;
+  if (n === "cochin") return cat.origins.find((o) => norm(o.city) === "kochi") ?? null;
+  if (n === "mysore") return cat.origins.find((o) => norm(o.city) === "mysuru") ?? null;
+  return cat.origins.find((o) => norm(o.city) === n) ?? null;
 }
 export function resolveDestination(city: string, cat: Catalog = getCatalog()) {
   return cat.destinations.find((d) => norm(d.city) === norm(city)) ?? null;

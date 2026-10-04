@@ -175,6 +175,21 @@ function Index() {
     }
   };
 
+  const applyPatch = (p: Record<string, unknown>) => {
+    setTrip((curr) => ({
+      ...curr,
+      ...(p as Partial<TripInputs>),
+      preferences: { ...curr.preferences, ...((p["preferences"] as object) ?? {}) },
+    }));
+    setVersion((v) => v + 1);
+    setResult(null);
+    setExplanation(null);
+    setConfirmedVersion(null);
+    setSelectedOptionId(null);
+    setSaved(false);
+    setSelectionNotice(null);
+  };
+
   const send = async (text: string) => {
     setLastMsg(text);
     setChat((c) => [...c, { kind: "user", text }]);
@@ -194,6 +209,9 @@ function Index() {
 
       if (res.status === "ok") {
         if (res.trip_id && !tripId) setTripId(res.trip_id);
+        if (res.output.input_patch && Object.keys(res.output.input_patch).length > 0) {
+          applyPatch(res.output.input_patch);
+        }
         setChat((c) => [
           ...c,
           {
@@ -242,13 +260,6 @@ function Index() {
       setBusy(false);
     }
   };
-
-  const applyPatch = (p: Record<string, unknown>) =>
-    change({
-      ...trip,
-      ...(p as Partial<TripInputs>),
-      preferences: { ...trip.preferences, ...((p["preferences"] as object) ?? {}) },
-    });
 
   const handleSelectOption = async (optionId: string) => {
     if (!tripId || !saved || busy) return;
