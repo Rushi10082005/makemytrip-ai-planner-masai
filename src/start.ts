@@ -12,12 +12,10 @@ const errorMiddleware = createMiddleware().server(async ({ next, request }) => {
     console.error("[Server Error]", error);
     const isRpc =
       request?.headers?.get("accept")?.includes("application/json") ||
-      request?.url?.includes("/_serverFn");
+      request?.url?.includes("/_serverFn") ||
+      Boolean(request?.headers?.get("x-tanstack-start-action"));
     if (isRpc) {
-      return new Response(JSON.stringify({ error: "server_error", message: String(error) }), {
-        status: 500,
-        headers: { "content-type": "application/json" },
-      });
+      throw error;
     }
     return new Response(renderErrorPage(), {
       status: 500,

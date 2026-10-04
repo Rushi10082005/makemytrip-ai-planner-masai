@@ -106,7 +106,13 @@ async function runModel(
     ];
     for (let attempt = 0; attempt < 2; attempt++) {
       // first try + at most one repair
-      const res = await callGroq(apiKey, messages);
+      let res;
+      try {
+        res = await callGroq(apiKey, messages);
+      } catch (callErr) {
+        console.warn("Groq call exception:", callErr);
+        res = { error: "upstream" as const };
+      }
       if ("error" in res) {
         console.warn("Groq upstream error, falling back to deterministic:", res.error);
         const fallback = generateDeterministicFallback(
@@ -275,27 +281,37 @@ export const restoreSession = createServerFn({ method: "POST" })
 
 async function ensureTrip(ctx: Ctx, trip_id: string | null, inputs: TripInputs) {
   if (trip_id) {
-    const { data } = await ctx.supabase
-      .from("trips")
-      .select("trip_id, trip_version")
-      .eq("trip_id", trip_id)
-      .maybeSingle();
-    if (data) return data as { trip_id: string; trip_version: number };
+    try {
+      const { data } = await ctx.supabase
+        .from("trips")
+        .select("trip_id, trip_version")
+        .eq("trip_id", trip_id)
+        .maybeSingle();
+      if (data) return data as { trip_id: string; trip_version: number };
+    } catch {
+      // ignore
+    }
   }
-  const { data, error } = await ctx.supabase
-    .from("trips")
-    .insert({
-      owner_id: ctx.userId,
-      dataset_version: DATASET_VERSION,
-      confirmed_inputs: inputs,
-      status: "draft",
-      trip_version: 0,
-    })
-    .select("trip_id, trip_version")
-    .single();
-  if (error) throw new Error("save_failed");
-  await logEvent(ctx, "session_started", data.trip_id);
-  return data as { trip_id: string; trip_version: number };
+  try {
+    const { data, error } = await ctx.supabase
+      .from("trips")
+      .insert({
+        owner_id: ctx.userId,
+        dataset_version: DATASET_VERSION,
+        confirmed_inputs: inputs,
+        status: "draft",
+        trip_version: 0,
+      })
+      .select("trip_id, trip_version")
+      .single();
+    if (!error && data) {
+      await logEvent(ctx, "session_started", data.trip_id).catch(() => {});
+      return data as { trip_id: string; trip_version: number };
+    }
+  } catch (err) {
+    console.warn("ensureTrip insert skipped:", err);
+  }
+  return { trip_id: crypto.randomUUID(), trip_version: 0 };
 }
 
 // ---------- Chat: extraction (proposed patch only; user must confirm) ----------
@@ -314,19 +330,26 @@ export const sendMessage = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const limited = await rateCheck(ctx);
-    if (limited) return { status: limited } as const;
-    let trip;
     try {
-      trip = await ensureTrip(ctx, data.trip_id, data.inputs as TripInputs);
+      const limited = await rateCheck(ctx);
+      if (limited) return { status: limited } as const;
     } catch {
-      return { status: "save_error" } as const;
+      // non-blocking
     }
-    const { data: prior } = await ctx.supabase
-      .from("messages")
-      .select("validated_output")
-      .eq("idempotency_key", `${data.idempotency_key}:a`)
-      .maybeSingle();
+
+    const trip = await ensureTrip(ctx, data.trip_id, data.inputs as TripInputs);
+
+    let prior = null;
+    try {
+      const { data: p } = await ctx.supabase
+        .from("messages")
+        .select("validated_output")
+        .eq("idempotency_key", `${data.idempotency_key}:a`)
+        .maybeSingle();
+      prior = p;
+    } catch {
+      // ignore
+    }
     if (prior?.validated_output)
       return {
         status: "ok",
@@ -334,19 +357,27 @@ export const sendMessage = createServerFn({ method: "POST" })
         output: prior.validated_output as AssistantOutput,
         saved: true,
       } as const;
+
     const clean = redact(data.message);
     const history = await historyFor(ctx, trip.trip_id);
-    const u = await ctx.supabase.from("messages").upsert(
-      {
-        trip_id: trip.trip_id,
-        owner_id: ctx.userId,
-        trip_version: trip.trip_version,
-        role: "user",
-        redacted_content: clean,
-        idempotency_key: `${data.idempotency_key}:u`,
-      },
-      { onConflict: "owner_id,idempotency_key", ignoreDuplicates: true },
-    );
+    let uError = false;
+    try {
+      const u = await ctx.supabase.from("messages").upsert(
+        {
+          trip_id: trip.trip_id,
+          owner_id: ctx.userId,
+          trip_version: trip.trip_version,
+          role: "user",
+          redacted_content: clean,
+          idempotency_key: `${data.idempotency_key}:u`,
+        },
+        { onConflict: "owner_id,idempotency_key", ignoreDuplicates: true },
+      );
+      uError = Boolean(u?.error);
+    } catch {
+      uError = true;
+    }
+
     const res = await runModel(
       {
         mode: "extract",
@@ -367,20 +398,31 @@ export const sendMessage = createServerFn({ method: "POST" })
         trip_id: trip.trip_id,
       } as const;
     }
-    let saved = !u.error && data.fault !== "save";
+
+    let saved = !uError && data.fault !== "save";
     if (saved) {
-      const a = await ctx.supabase.from("messages").insert({
-        trip_id: trip.trip_id,
-        owner_id: ctx.userId,
-        trip_version: trip.trip_version,
-        role: "assistant",
-        redacted_content: redact(res.output.message),
-        validated_output: res.output,
-        idempotency_key: `${data.idempotency_key}:a`,
-      });
-      saved = !a.error;
+      try {
+        const a = await ctx.supabase.from("messages").insert({
+          trip_id: trip.trip_id,
+          owner_id: ctx.userId,
+          trip_version: trip.trip_version,
+          role: "assistant",
+          redacted_content: redact(res.output.message),
+          validated_output: res.output,
+          idempotency_key: `${data.idempotency_key}:a`,
+        });
+        if (a?.error) saved = false;
+      } catch {
+        saved = false;
+      }
     }
-    return { status: "ok", trip_id: trip.trip_id, output: res.output, saved } as const;
+
+    return {
+      status: "ok",
+      trip_id: trip.trip_id,
+      output: res.output,
+      saved,
+    } as const;
   });
 
 // ---------- Confirm trip: versioned save, server retrieval, trace, grounded explanation ----------

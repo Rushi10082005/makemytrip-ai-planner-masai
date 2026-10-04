@@ -13,6 +13,7 @@ import {
   type TripInputs,
 } from "@/lib/planner";
 import { getBackendStatus, type AssistantOutput } from "@/lib/assistant.functions";
+import { extractTripHeuristic, formatExtractionNotice } from "@/lib/extractor";
 import {
   restoreSession,
   sendMessage,
@@ -248,15 +249,30 @@ function Index() {
       }
     } catch (err) {
       console.error("Chat sendMessage error:", err);
-      setChat((c) => [
-        ...c,
-        {
-          kind: "notice",
-          tone: "error",
-          retry: true,
-          text: "Connection problem. Your inputs are kept.",
-        },
-      ]);
+      const patch = extractTripHeuristic(text, trip);
+      if (patch && Object.keys(patch).length > 0) {
+        applyPatch(patch);
+        const { message, question } = formatExtractionNotice(patch);
+        setChat((c) => [
+          ...c,
+          {
+            kind: "assistant",
+            text: message,
+            question,
+            patch,
+          },
+        ]);
+      } else {
+        setChat((c) => [
+          ...c,
+          {
+            kind: "notice",
+            tone: "error",
+            retry: true,
+            text: "Connection problem. Your inputs are kept.",
+          },
+        ]);
+      }
     } finally {
       setBusy(false);
     }
