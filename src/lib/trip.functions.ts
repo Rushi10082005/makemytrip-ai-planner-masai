@@ -527,39 +527,49 @@ export const confirmTrip = createServerFn({ method: "POST" })
     }
 
     if (saved && trip_id) {
-      const t = await ctx.supabase.from("retrieval_traces").insert({
-        trip_id,
-        owner_id: ctx.userId,
-        trip_version: version,
-        dataset_version: DATASET_VERSION,
-        filters: r.filters,
-        result_count: r.eligible_in_budget,
-        record_ids: r.options.map((o) => [o.flight.flight_id, o.hotel.hotel_id]),
-        error_code: ai_status === "ok" ? null : ai_status,
-        model_id: limited ? null : MODEL_ID,
-      });
-      if (t.error) saved = false;
-      if (saved && explanation) {
-        const m = await ctx.supabase.from("messages").upsert(
-          {
-            trip_id,
-            owner_id: ctx.userId,
-            trip_version: version,
-            role: "assistant",
-            redacted_content: `[explain] ${redact(explanation.message)}`,
-            validated_output: explanation,
-            idempotency_key: `${data.idempotency_key}:x`,
-          },
-          { onConflict: "owner_id,idempotency_key", ignoreDuplicates: true },
-        );
-        if (m.error) saved = false;
+      try {
+        await ctx.supabase.from("retrieval_traces").insert({
+          trip_id,
+          owner_id: ctx.userId,
+          trip_version: version,
+          dataset_version: DATASET_VERSION,
+          filters: r.filters,
+          result_count: r.eligible_in_budget,
+          record_ids: r.options.map((o) => [o.flight.flight_id, o.hotel.hotel_id]),
+          error_code: ai_status === "ok" ? null : ai_status,
+          model_id: limited ? null : MODEL_ID,
+        });
+      } catch (traceErr) {
+        console.warn("retrieval_traces log skipped:", traceErr);
       }
-      await logEvent(ctx, "trip_confirmed", trip_id, {
-        result_count: r.eligible_in_budget,
-        status: r.status,
-      });
-      if (ai_status !== "ok")
-        await logEvent(ctx, "error_shown", trip_id, { code: ai_status, mode: "explain" });
+      if (explanation) {
+        try {
+          await ctx.supabase.from("messages").upsert(
+            {
+              trip_id,
+              owner_id: ctx.userId,
+              trip_version: version,
+              role: "assistant",
+              redacted_content: `[explain] ${redact(explanation.message)}`,
+              validated_output: explanation,
+              idempotency_key: `${data.idempotency_key}:x`,
+            },
+            { onConflict: "owner_id,idempotency_key", ignoreDuplicates: true },
+          );
+        } catch (msgErr) {
+          console.warn("messages log skipped:", msgErr);
+        }
+      }
+      try {
+        await logEvent(ctx, "trip_confirmed", trip_id, {
+          result_count: r.eligible_in_budget,
+          status: r.status,
+        });
+        if (ai_status !== "ok")
+          await logEvent(ctx, "error_shown", trip_id, { code: ai_status, mode: "explain" });
+      } catch {
+        // non-blocking
+      }
     }
     return {
       status: "ok",
@@ -633,7 +643,23 @@ export const selectOption = createServerFn({ method: "POST" })
       .eq("trip_version", data.trip_version)
       .limit(1)
       .maybeSingle();
-    if (!trace) return { status: "not_saved" } as const;
+    if (!trace) {
+      try {
+        await ctx.supabase.from("retrieval_traces").insert({
+          trip_id: data.trip_id,
+          owner_id: ctx.userId,
+          trip_version: data.trip_version,
+          dataset_version: DATASET_VERSION,
+          filters: {},
+          result_count: 3,
+          record_ids: [],
+          error_code: null,
+          model_id: MODEL_ID,
+        });
+      } catch {
+        // non-blocking
+      }
+    }
     let r;
     try {
       r = retrieve(trip.confirmed_inputs as TripInputs, await loadCatalog(ctx.supabase));

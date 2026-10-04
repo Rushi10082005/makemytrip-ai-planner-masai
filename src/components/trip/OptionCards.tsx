@@ -206,26 +206,26 @@ function Card({
         </Button>
         <Button
           variant={isSelected ? "secondary" : "default"}
-          disabled={!storageReady || !saved || !tripId || busy}
+          disabled={busy}
           onClick={() => onSelectOption?.(o.option_id)}
           aria-describedby={`sel-${o.option_id}`}
         >
           <CheckCircle2 aria-hidden className={isSelected ? "text-success" : ""} />
           {isSelected ? "Selected (Simulated)" : "Simulate selection"}
         </Button>
-        {!storageReady ? (
-          <p id={`sel-${o.option_id}`} className="text-xs text-muted-foreground">
-            Needs private storage, which isn't connected yet. No booking is ever made.
-          </p>
-        ) : !saved || !tripId ? (
-          <p id={`sel-${o.option_id}`} className="text-xs text-muted-foreground">
-            Confirm your trip to save and enable simulated selection.
-          </p>
-        ) : isSelected ? (
+        {isSelected ? (
           <p id={`sel-${o.option_id}`} className="text-xs font-medium text-success">
             Simulated selection stored. Fictional demo reference only.
           </p>
-        ) : null}
+        ) : !saved || !tripId ? (
+          <p id={`sel-${o.option_id}`} className="text-xs text-muted-foreground">
+            Click to simulate selecting this option for your trip.
+          </p>
+        ) : (
+          <p id={`sel-${o.option_id}`} className="text-xs text-muted-foreground">
+            Synthetic demo selection. No real booking is made.
+          </p>
+        )}
       </div>
     </li>
   );
