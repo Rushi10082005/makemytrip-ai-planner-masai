@@ -346,6 +346,25 @@ export function generateDeterministicFallback(
     };
   }
 
+  // Metro origins requested as destinations (e.g. "to Mumbai")
+  const metroDest = rawText.match(/\bto\s+(mumbai|bombay|delhi|bangalore|bengaluru|kolkata|hyderabad)\b/i);
+  if (metroDest) {
+    const rawCity = metroDest[1];
+    const city = /bombay/i.test(rawCity)
+      ? "Mumbai"
+      : /bangalore/i.test(rawCity)
+        ? "Bengaluru"
+        : rawCity.charAt(0).toUpperCase() + rawCity.slice(1).toLowerCase();
+    return {
+      status: "limitation",
+      message: `Synthetic demo: ${city} is a departure origin in this demo, not one of our 20 domestic holiday destinations.`,
+      question: `Would you like to travel from ${city} to a supported destination like Goa, Udaipur, Jaipur, or Kochi?`,
+      input_patch: { origin: city },
+      options: [],
+      actions: ["edit_inputs"],
+    };
+  }
+
   // Rule-based heuristic field extraction from user message
   const currentTrip = envelope["current_trip_state"] as Partial<TripInputs> | undefined;
   const patch = extractTripHeuristic(rawText, currentTrip) as Record<string, unknown>;

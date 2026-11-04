@@ -197,7 +197,7 @@ function Card({
           <Link
             to="/details/$optionId"
             params={{ optionId: o.option_id }}
-            search={tripId ? { trip: tripId, v: tripVersion ?? 0, t } : { t }}
+            search={tripId && saved ? { trip: tripId, v: tripVersion ?? 0, t } : { t }}
             target="_blank"
             rel="noopener"
           >

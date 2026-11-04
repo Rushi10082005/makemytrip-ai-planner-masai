@@ -48,8 +48,8 @@ function Details() {
     }
   }, [trip, v, optionId]);
 
-  // Fallback to offline decoded trip if no server params are provided
-  const offlineTrip = !trip && t ? decodeTrip(t) : null;
+  // Fallback to offline decoded trip if server verification is unavailable or fails
+  const offlineTrip = t ? decodeTrip(t) : null;
   const offlineResult = offlineTrip ? retrieve(offlineTrip) : null;
   const offlineOption =
     offlineResult && offlineResult.status !== "invalid"

@@ -50,9 +50,12 @@ export const requireSupabaseAuth = createMiddleware({ type: "function" })
     }
     return next({
       headers: token ? { Authorization: `Bearer ${token}` } : {},
+      sendContext: {
+        authToken: token || undefined,
+      },
     });
   })
-  .server(async ({ next }) => {
+  .server(async ({ next, context }) => {
     const DEFAULT_URL = "https://wrfnaxpnidnvamlvjnet.supabase.co";
     const DEFAULT_KEY =
       "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndyZm5heHBuaWRudmFtbHZqbmV0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5MzUyMTgsImV4cCI6MjEwNjUxMTIxOH0.We43uw_oJoW3LZW2tUwkcpfZ-dk0wHwsKAWZrBT76I4";
@@ -60,9 +63,20 @@ export const requireSupabaseAuth = createMiddleware({ type: "function" })
     const SUPABASE_URL = process.env["SUPABASE_URL"] || DEFAULT_URL;
     const SUPABASE_PUBLISHABLE_KEY = process.env["SUPABASE_PUBLISHABLE_KEY"] || DEFAULT_KEY;
 
-    const request = getRequest();
-    const authHeader = request?.headers?.get("authorization");
-    let token = authHeader?.startsWith("Bearer ") ? authHeader.replace("Bearer ", "") : undefined;
+    let token: string | undefined;
+    try {
+      const request = getRequest();
+      const authHeader = request?.headers?.get("authorization");
+      if (authHeader?.startsWith("Bearer ")) {
+        token = authHeader.replace("Bearer ", "");
+      }
+    } catch {
+      // getRequest might not be available in all runtimes
+    }
+
+    if (!token && typeof context === "object" && context && "authToken" in context) {
+      token = (context as { authToken?: string }).authToken;
+    }
     let sub = "";
     let claims: Record<string, unknown> = {};
     let supabaseClient: ReturnType<typeof createClient<Database>> | undefined;
